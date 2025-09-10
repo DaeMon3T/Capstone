@@ -16,3 +16,9 @@ docker-data/
 
 nginx/
 Docker-Compose.yml
+
+
+# Ignore Node.js
+node_modules/
+dist/
+build/
