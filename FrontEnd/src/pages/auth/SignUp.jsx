@@ -48,7 +48,7 @@ export default function SignUp() {
     }
 
     try {
-      const response = await fetch("http://localhost:8000/api/auth/send-otp/", {
+      const response = await fetch("http://localhost:8000/api/v1/auth/send-otp/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),

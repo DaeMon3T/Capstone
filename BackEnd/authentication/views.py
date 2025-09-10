@@ -16,8 +16,9 @@ from datetime import datetime
 import random
 import string
 
-from .models import OTPVerification, User, Address, CityMunicipality, Province
-
+from addresses.models import Address, CityMunicipality, Province
+from addresses.serializers import AddressCreateSerializer
+from .models import OTPVerification, User
 def send_otp(email):
     """
     Send OTP to the given email address
@@ -125,7 +126,7 @@ class CompleteSignupView(APIView):
     
     def post(self, request):
         try:
-            # Extract data from request
+            # Extract user data
             email = request.data.get("email")
             username = request.data.get("username")
             first_name = request.data.get("first_name")
@@ -136,16 +137,16 @@ class CompleteSignupView(APIView):
             sex = request.data.get("sex")
             date_of_birth = request.data.get("date_of_birth")
             
-            # Extract flat address fields
-            street = request.data.get("street")
-            barangay = request.data.get("barangay")
-            city_municipality_name = request.data.get("city_municipality")
-            province_name = request.data.get("province")
-            zip_code = request.data.get("zip_code")
+            # Extract address data
+            address_data = {
+                'street': request.data.get("street"),
+                'barangay': request.data.get("barangay"),
+                'city_municipality': request.data.get("city_municipality"),
+                'province': request.data.get("province"),
+                'zip_code': request.data.get("zip_code", '')
+            }
             
-            print(f"Received data: {request.data}")  # Debug log
-            
-            # Validate required fields
+            # Validate required fields (same as before)
             required_fields = {
                 "email": email,
                 "password": password,
@@ -162,33 +163,26 @@ class CompleteSignupView(APIView):
                     "error": f"Missing required fields: {', '.join(missing_fields)}"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Validate address fields
-            address_fields = {
-                "street": street,
-                "barangay": barangay,
-                "city_municipality": city_municipality_name,
-                "province": province_name
-            }
-            
-            missing_address = [field for field, value in address_fields.items() if not value]
-            if missing_address:
+            # Validate address using serializer
+            address_serializer = AddressCreateSerializer(data=address_data)
+            if not address_serializer.is_valid():
                 return Response({
-                    "error": f"Missing address fields: {', '.join(missing_address)}"
+                    "error": "Invalid address data",
+                    "details": address_serializer.errors
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Ensure OTP was verified before creating account
+            # Rest of validation (OTP check, user exists check, etc.)
             if not OTPVerification.objects.filter(email=email, is_used=True).exists():
                 return Response({
                     "error": "Email not verified. Please verify your email first."
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Check if user already exists
             if User.objects.filter(email=email).exists():
                 return Response({
                     "error": "User with this email already exists"
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Validate date of birth format
+            # Validate date of birth
             try:
                 dob = datetime.strptime(date_of_birth, "%Y-%m-%d").date()
             except ValueError:
@@ -196,29 +190,10 @@ class CompleteSignupView(APIView):
                     "error": "Invalid date format for date of birth. Use YYYY-MM-DD format."
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Use database transaction to ensure data consistency
+            # Create user with address
             with transaction.atomic():
-                # Get or create Province
-                province, created = Province.objects.get_or_create(name=province_name)
-                if created:
-                    print(f"Created new province: {province_name}")
-                
-                # Get or create CityMunicipality
-                city_municipality, created = CityMunicipality.objects.get_or_create(
-                    name=city_municipality_name,
-                    province=province,
-                    defaults={'zip_code': zip_code or ''}
-                )
-                if created:
-                    print(f"Created new city/municipality: {city_municipality_name}")
-                
-                # Create Address
-                address = Address.objects.create(
-                    street=street,
-                    barangay=barangay,
-                    city_municipality=city_municipality
-                )
-                print(f"Created address: {address}")
+                # Create address using serializer
+                address = address_serializer.save()
                 
                 # Create User
                 user = User.objects.create_user(
@@ -234,9 +209,8 @@ class CompleteSignupView(APIView):
                     address=address,
                     is_email_verified=True
                 )
-                print(f"Created user: {user.email}")
                 
-                # Invalidate all OTP records for this email
+                # Invalidate all OTP records
                 OTPVerification.objects.filter(email=email).update(is_used=True)
                 
             return Response({
@@ -248,37 +222,11 @@ class CompleteSignupView(APIView):
         except Exception as e:
             print(f"Error creating patient account: {str(e)}")
             import traceback
-            traceback.print_exc()  # Print full error traceback
+            traceback.print_exc()
             return Response({
                 "error": f"An error occurred while creating your account: {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# Additional utility view to get provinces and cities (optional)
-class LocationDataView(APIView):
-    permission_classes = [AllowAny]
-    
-    def get(self, request):
-        """Get provinces and their cities for form dropdowns"""
-        provinces = Province.objects.prefetch_related('citymunicipality_set').all()
-        
-        data = []
-        for province in provinces:
-            cities = [
-                {
-                    'id': city.id,
-                    'name': city.name,
-                    'zip_code': city.zip_code
-                }
-                for city in province.citymunicipality_set.all()
-            ]
-            
-            data.append({
-                'id': province.id,
-                'name': province.name,
-                'cities': cities
-            })
-        
-        return Response(data, status=status.HTTP_200_OK)
 
 class LoginView(APIView):
     def post(self, request):

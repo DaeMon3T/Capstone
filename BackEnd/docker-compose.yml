@@ -1,0 +1,363 @@
+# # =============================================================================
+# # DJANGO BACKEND DOCKER SETUP FOR REMOTE NGINX
+# # =============================================================================
+# # This configuration sets up Django/Gunicorn in Docker containers
+# # that will be accessed by a remote nginx load balancer
+
+# # -----------------------------------------------------------------------------
+# # DOCKER-COMPOSE.YML - BACKEND SERVER 1 (192.168.1.100)
+# # -----------------------------------------------------------------------------
+# version: '3.8'
+
+# services:
+#   # Django Backend Service
+#   django-backend:
+#     build: .
+#     container_name: django-backend-1
+#     ports:
+#       - "8000:8000"  # Expose container port 8000 to host port 8000
+#     environment:
+#       - DEBUG=False
+#       - ALLOWED_HOSTS=your-domain.com,192.168.1.100,nginx-server-ip
+#       - DATABASE_URL=postgresql://user:pass@db:5432/dbname
+#       - SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https
+#     volumes:
+#       - ./app:/app
+#       - static_volume:/app/static
+#       - media_volume:/app/media
+#     depends_on:
+#       - db
+#       - redis
+#     restart: unless-stopped
+#     command: gunicorn --bind 0.0.0.0:8000 --workers 4 myproject.wsgi:application
+#     networks:
+#       - backend-network
+
+#   # PostgreSQL Database
+#   db:
+#     image: postgres:15
+#     container_name: postgres-db-1
+#     environment:
+#       POSTGRES_DB: your_db_name
+#       POSTGRES_USER: your_db_user
+#       POSTGRES_PASSWORD: your_db_password
+#     volumes:
+#       - postgres_data:/var/lib/postgresql/data
+#     ports:
+#       - "5432:5432"  # Optional: expose for debugging
+#     restart: unless-stopped
+#     networks:
+#       - backend-network
+
+#   # Redis for Caching/Sessions
+#   redis:
+#     image: redis:7-alpine
+#     container_name: redis-cache-1
+#     ports:
+#       - "6379:6379"  # Optional: expose for debugging
+#     restart: unless-stopped
+#     networks:
+#       - backend-network
+
+# volumes:
+#   postgres_data:
+#   static_volume:
+#   media_volume:
+
+# networks:
+#   backend-network:
+#     driver: bridge
+
+# ---
+
+# # -----------------------------------------------------------------------------
+# # DOCKERFILE FOR DJANGO APPLICATION
+# # -----------------------------------------------------------------------------
+# FROM python:3.11-slim
+
+# # Set environment variables
+# ENV PYTHONDONTWRITEBYTECODE=1
+# ENV PYTHONUNBUFFERED=1
+# ENV DEBIAN_FRONTEND=noninteractive
+
+# # Set work directory
+# WORKDIR /app
+
+# # Install system dependencies
+# RUN apt-get update \
+#     && apt-get install -y --no-install-recommends \
+#         postgresql-client \
+#         build-essential \
+#         libpq-dev \
+#     && rm -rf /var/lib/apt/lists/*
+
+# # Install Python dependencies
+# COPY requirements.txt /app/
+# RUN pip install --no-cache-dir -r requirements.txt
+
+# # Copy project
+# COPY . /app/
+
+# # Collect static files
+# RUN python manage.py collectstatic --noinput
+
+# # Create non-root user
+# RUN adduser --disabled-password --gecos '' appuser
+# RUN chown -R appuser:appuser /app
+# USER appuser
+
+# # Expose port
+# EXPOSE 8000
+
+# # Health check
+# HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+#     CMD curl -f http://localhost:8000/health/ || exit 1
+
+# # Default command (can be overridden in docker-compose)
+# CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "myproject.wsgi:application"]
+
+# ---
+
+# # -----------------------------------------------------------------------------
+# # DJANGO SETTINGS CONFIGURATION FOR REMOTE NGINX
+# # -----------------------------------------------------------------------------
+
+# # settings.py additions for nginx proxy setup
+# import os
+
+# # SECURITY SETTINGS FOR NGINX PROXY
+# ALLOWED_HOSTS = [
+#     'your-domain.com',
+#     'www.your-domain.com', 
+#     '192.168.1.100',  # Backend server 1 IP
+#     '192.168.1.101',  # Backend server 2 IP
+#     'nginx-server-ip', # Nginx server IP
+#     'localhost',
+#     '127.0.0.1',
+# ]
+
+# # SSL/HTTPS SETTINGS FOR NGINX SSL TERMINATION
+# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# SECURE_SSL_REDIRECT = False  # Nginx handles this
+# USE_TLS = True
+
+# # CORS SETTINGS (if using django-cors-headers)
+# CORS_ALLOWED_ORIGINS = [
+#     "https://your-domain.com",
+#     "https://www.your-domain.com",
+# ]
+
+# CORS_ALLOW_CREDENTIALS = True
+
+# # TRUST NGINX PROXY
+# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# # LOGGING CONFIGURATION
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'formatters': {
+#         'verbose': {
+#             'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+#             'style': '{',
+#         },
+#     },
+#     'handlers': {
+#         'console': {
+#             'class': 'logging.StreamHandler',
+#             'formatter': 'verbose',
+#         },
+#     },
+#     'root': {
+#         'handlers': ['console'],
+#         'level': 'INFO',
+#     },
+#     'loggers': {
+#         'django': {
+#             'handlers': ['console'],
+#             'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+#             'propagate': False,
+#         },
+#     },
+# }
+
+# ---
+
+# # -----------------------------------------------------------------------------
+# # GUNICORN CONFIGURATION FILE
+# # -----------------------------------------------------------------------------
+
+# # gunicorn.conf.py
+# import multiprocessing
+
+# # Server socket
+# bind = "0.0.0.0:8000"
+# backlog = 2048
+
+# # Worker processes
+# workers = multiprocessing.cpu_count() * 2 + 1
+# worker_class = "sync"
+# worker_connections = 1000
+# timeout = 30
+# keepalive = 2
+
+# # Restart workers after this many requests, to prevent memory leaks
+# max_requests = 1000
+# max_requests_jitter = 50
+
+# # Logging
+# accesslog = "-"  # stdout
+# errorlog = "-"   # stderr
+# loglevel = "info"
+# access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
+
+# # Process naming
+# proc_name = 'django_backend'
+
+# # Server mechanics
+# daemon = False
+# pidfile = '/tmp/gunicorn.pid'
+# user = None
+# group = None
+# tmp_upload_dir = None
+
+# # SSL (not needed since nginx handles SSL termination)
+# # keyfile = None
+# # certfile = None
+
+# ---
+
+# # -----------------------------------------------------------------------------
+# # REQUIREMENTS.TXT
+# # -----------------------------------------------------------------------------
+
+# Django>=4.2.0
+# gunicorn>=21.2.0
+# psycopg2-binary>=2.9.0
+# redis>=5.0.0
+# django-cors-headers>=4.3.0
+# whitenoise>=6.6.0  # For static files if needed
+# celery>=5.3.0      # If using async tasks
+# python-decouple>=3.8  # For environment variables
+
+# ---
+
+# # -----------------------------------------------------------------------------
+# # DOCKER COMMANDS FOR DEPLOYMENT
+# # -----------------------------------------------------------------------------
+
+# # Build and start backend server 1 (192.168.1.100)
+# docker-compose up -d --build
+
+# # Build and start backend server 2 (192.168.1.101) 
+# # (use same compose file but different container names)
+
+# # View logs
+# docker-compose logs -f django-backend
+
+# # Scale backend services (if on same server)
+# docker-compose up -d --scale django-backend=2
+
+# # Health check
+# curl -I http://192.168.1.100:8000/health/
+# curl -I http://192.168.1.101:8000/health/
+
+# # Connect to running container
+# docker exec -it django-backend-1 bash
+
+# # Database migrations
+# docker exec django-backend-1 python manage.py migrate
+
+# # Create superuser
+# docker exec -it django-backend-1 python manage.py createsuperuser
+
+# ---
+
+# # -----------------------------------------------------------------------------
+# # HEALTH CHECK ENDPOINT (views.py)
+# # -----------------------------------------------------------------------------
+
+# from django.http import JsonResponse
+# from django.views.decorators.http import require_http_methods
+# from django.views.decorators.csrf import csrf_exempt
+# import socket
+
+# @csrf_exempt
+# @require_http_methods(["GET"])
+# def health_check(request):
+#     """Health check endpoint for nginx load balancer"""
+#     return JsonResponse({
+#         'status': 'healthy',
+#         'server': socket.gethostname(),
+#         'timestamp': timezone.now().isoformat(),
+#     })
+
+# # urls.py
+# from django.urls import path
+# from . import views
+
+# urlpatterns = [
+#     path('health/', views.health_check, name='health_check'),
+#     # ... other URLs
+# ]
+
+# ---
+
+# # -----------------------------------------------------------------------------
+# # NETWORK TROUBLESHOOTING COMMANDS
+# # -----------------------------------------------------------------------------
+
+# # Test backend connectivity from nginx server
+# curl -I http://192.168.1.100:8000/health/
+# curl -I http://192.168.1.101:8000/health/
+
+# # Test network connectivity
+# telnet 192.168.1.100 8000
+# nc -zv 192.168.1.100 8000
+
+# # Check if port is listening on backend server
+# netstat -tlnp | grep 8000
+# ss -tlnp | grep 8000
+
+# # Test from inside nginx server
+# docker exec nginx-container curl -I http://192.168.1.100:8000/health/
+
+# # Check Docker container status
+# docker ps
+# docker logs django-backend-1
+
+# # Test Django admin (if enabled)
+# curl http://192.168.1.100:8000/admin/
+
+# ---
+
+# # =============================================================================
+# # DEPLOYMENT CHECKLIST FOR REMOTE BACKENDS
+# # =============================================================================
+# #
+# # BACKEND SERVERS (192.168.1.100, 192.168.1.101):
+# # □ Docker and Docker Compose installed
+# # □ Django application containerized with proper Dockerfile
+# # □ Gunicorn configured to bind to 0.0.0.0:8000 (not localhost)
+# # □ Port 8000 exposed in docker-compose.yml
+# # □ Firewall allows incoming connections on port 8000
+# # □ ALLOWED_HOSTS includes nginx server IP and domain
+# # □ Health check endpoint implemented and accessible
+# # □ Static files served correctly (whitenoise or separate static server)
+# # □ Database connectivity working
+# # □ Environment variables configured
+# #
+# # NETWORK CONFIGURATION:
+# # □ Backend servers accessible from nginx server
+# # □ DNS resolution working (if using hostnames)
+# # □ Security groups/firewall rules configured
+# # □ Load balancer health checks passing
+# #
+# # NGINX SERVER:
+# # □ Upstream configuration updated with correct IPs/hostnames
+# # □ Proxy headers configured for Django compatibility
+# # □ SSL termination working
+# # □ Load balancing distributing requests correctly
+# # □ Health check endpoint monitoring backend status
+# #
+# # =============================================================================

@@ -18,7 +18,7 @@ import PatientProfile from './pages/patient/Profile';
 import PatientAppointments from './pages/patient/Appointments';
 
 // Doctor Pages
-import DoctorHome from './pages/doctor/Home';
+import DoctorHome from './pages/doctor/Dashboard';
 import DoctorProfile from './pages/doctor/Profile';
 import DoctorAppointments from './pages/doctor/Appointments';
 
@@ -48,7 +48,7 @@ export default function App() {
         <Route path="/patient/appointments" element={<PatientAppointments />} />
 
         {/* Doctor Routes */}
-        <Route path="/doctor/home" element={<DoctorHome />} />
+        <Route path="/doctor/dashboard" element={<DoctorHome />} />
         <Route path="/doctor/profile" element={<DoctorProfile />} />
         <Route path="/doctor/appointments" element={<DoctorAppointments />} />
 
