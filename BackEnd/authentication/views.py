@@ -19,6 +19,7 @@ import string
 from addresses.models import Address, CityMunicipality, Province
 from addresses.serializers import AddressCreateSerializer
 from .models import OTPVerification, User
+
 def send_otp(email):
     """
     Send OTP to the given email address

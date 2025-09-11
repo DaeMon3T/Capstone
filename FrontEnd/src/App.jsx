@@ -12,6 +12,10 @@ import SignIn from './pages/auth/SignIn';
 import SignUp from './pages/auth/SignUp';
 import ForgotPassword from './pages/auth/ForgotPassword';
 
+// Admin Pages
+import AdminDashboard from './pages/admin/Dashboard';
+import AdminProfile from './pages/admin/Profile';
+
 // Patient Pages
 import PatientHome from './pages/patient/Home';
 import PatientProfile from './pages/patient/Profile';
@@ -27,6 +31,7 @@ import StaffHome from './pages/staff/Home';
 import StaffProfile from './pages/staff/Profile';
 import StaffAppointments from './pages/staff/Appointments';
 
+
 export default function App() {
   return (
     <Router>
@@ -41,6 +46,10 @@ export default function App() {
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+
+        {/* Admin Routes */}
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/profile" element={<AdminProfile />} />
 
         {/* Patient Routes */}
         <Route path="/patient/home" element={<PatientHome />} />

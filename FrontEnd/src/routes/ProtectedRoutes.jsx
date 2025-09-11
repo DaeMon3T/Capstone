@@ -10,3 +10,10 @@ export default function ProtectedRoute({ children }) {
 
   return children;
 }
+
+
+// Add admin route check
+const AdminRoute = ({ children }) => {
+  const { user } = useAuth();
+  return user?.role === 'admin' ? children : <Navigate to="/signin" />;
+};
