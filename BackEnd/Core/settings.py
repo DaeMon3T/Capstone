@@ -106,11 +106,11 @@ WSGI_APPLICATION = 'Core.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'bukcare',
-        'USER': 'ken',
-        'PASSWORD': 'kenetwork',
-        'HOST' : 'localhost',
-        'PORT' : '5432',
+        'NAME': os.getenv("DATABASE_NAME"),
+        'USER': os.getenv("DATABASE_USER"),
+        'PASSWORD': os.getenv("DATABASE_PASSWORD"),
+        'HOST': os.getenv("DATABASE_HOST", "localhost"),
+        'PORT': os.getenv("DATABASE_PORT", "5432"),
     }
 }
 
@@ -167,6 +167,8 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
 }
+
+
 
 # Email (use an app password with Gmail or any SMTP)
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
