@@ -1,9 +1,42 @@
 from django.db import models
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils import timezone
 import random
 import string
 from addresses.models import Province, CityMunicipality, Address
+
+
+class UserManager(BaseUserManager):
+    """Custom user manager for email-based authentication"""
+    
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError('The Email field must be set')
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+    
+    def create_superuser(self, email, first_name, last_name, user_type, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
+        
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError('Superuser must have is_staff=True.')
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError('Superuser must have is_superuser=True.')
+        
+        return self.create_user(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            user_type=user_type,
+            password=password,
+            **extra_fields
+        )
+
 
 class User(AbstractUser):
     # User Types/Roles
@@ -13,6 +46,9 @@ class User(AbstractUser):
         ('staff', 'Staff'),
         ('patient', 'Patient'),
     ]
+    
+    # Remove the username field inherited from AbstractUser
+    username = None
     
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=30)
@@ -31,6 +67,9 @@ class User(AbstractUser):
         default='patient',
         help_text="User role in the system"
     )
+    
+    # Assign the custom manager
+    objects = UserManager()
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['first_name', 'last_name', 'user_type']
@@ -56,6 +95,7 @@ class User(AbstractUser):
     def __str__(self):
         return f"{self.get_full_name()} ({self.get_user_type_display()})"
 
+
 class OTPVerification(models.Model):
     email = models.EmailField()
     otp_code = models.CharField(max_length=6)
@@ -77,6 +117,7 @@ class OTPVerification(models.Model):
     
     class Meta:
         ordering = ['-created_at']
+
 
 def send_otp(email):
     """Send OTP to email address"""

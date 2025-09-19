@@ -22,6 +22,7 @@ import AdminDashboard from './pages/admin/Dashboard';
 import AdminProfile from './pages/admin/Profile';
 
 // Doctor Pages
+import DoctorSignUp from './pages/doctor/SignUp';   // ✅ add this
 import DoctorDashboard from './pages/doctor/Dashboard';
 import DoctorAppointments from './pages/doctor/Appointments';
 import DoctorProfile from './pages/doctor/Profile';
@@ -66,7 +67,8 @@ function App() {
                 <AdminProfile />
               </AdminRoute>
             } />
-            
+
+            <Route path="/doctor/signup" element={<DoctorSignUp />} />
             {/* Doctor Routes */}
             <Route path="/doctor/dashboard" element={
               <DoctorRoute>

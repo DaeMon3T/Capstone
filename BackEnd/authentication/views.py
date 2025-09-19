@@ -1,12 +1,13 @@
 # views.py
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework import permissions
+from rest_framework import permissions,status
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.decorators import api_view, permission_classes
 from .serializers import LoginSerializer
 from django.utils import timezone
 from django.db import transaction
@@ -230,14 +231,28 @@ class CompleteSignupView(APIView):
 
 
 class LoginView(APIView):
+    permission_classes = [AllowAny]
+    
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data["user"]
             refresh = RefreshToken.for_user(user)
+            
+            # Return user data along with tokens
             return Response({
                 "refresh": str(refresh),
                 "access": str(refresh.access_token),
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "middle_name": user.middle_name,
+                    "last_name": user.last_name,
+                    "user_type": user.user_type,
+                    "is_email_verified": user.is_email_verified,
+                    "full_name": user.get_full_name(),
+                }
             }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -245,10 +260,48 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        # Add custom claims if needed
+        # Add custom claims
         token['email'] = user.email
+        token['user_type'] = user.user_type
+        token['user_id'] = user.id
         return token
 
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        
+        # Add user data to response
+        data['user'] = {
+            'id': self.user.id,
+            'email': self.user.email,
+            'first_name': self.user.first_name,
+            'middle_name': self.user.middle_name,
+            'last_name': self.user.last_name,
+            'user_type': self.user.user_type,
+            'is_email_verified': self.user.is_email_verified,
+            'full_name': self.user.get_full_name(),
+        }
+        
+        return data
+
 class CustomTokenObtainPairView(TokenObtainPairView):
-    permission_classes = (permissions.AllowAny,)  # ← important!
+    permission_classes = (permissions.AllowAny,)
     serializer_class = CustomTokenObtainPairSerializer
+
+# Add a user profile endpoint to get current user data
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_current_user(request):
+    user = request.user
+    return Response({
+        "id": user.id,
+        "email": user.email,
+        "first_name": user.first_name,
+        "middle_name": user.middle_name,
+        "last_name": user.last_name,
+        "user_type": user.user_type,
+        "is_email_verified": user.is_email_verified,
+        "full_name": user.get_full_name(),
+        "contact_number": user.contact_number,
+        "sex": user.sex,
+        "date_of_birth": user.date_of_birth,
+    })

@@ -22,3 +22,5 @@ Docker-Compose.yml
 node_modules/
 dist/
 build/
+
+API_Testing/
